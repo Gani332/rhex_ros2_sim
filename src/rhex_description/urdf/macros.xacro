@@ -1,0 +1,40 @@
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <xacro:macro name="leg_link" params="name mesh">
+    <link name="${name}">
+      <visual>
+        <geometry>
+          <mesh filename="$(find rhex_description)/meshes/${mesh}" scale="${scale}"/>
+        </geometry>
+        <material name="white"/>
+      </visual>
+      <collision>
+        <geometry>
+          <mesh filename="$(find rhex_description)/meshes/${mesh}" scale="${scale}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="0.024174555469373752"/>
+        <origin xyz="0 0 0"/>
+        <inertia ixx="0.00011" ixy="0.0" ixz="0.0" iyy="0.00013" iyz="-0.0" izz="2.1e-05"/>
+      </inertial>
+    </link>
+
+    <gazebo reference="${name}">
+      <self_collide>true</self_collide>
+    </gazebo>
+
+  </xacro:macro>
+
+  <xacro:macro name="leg_joint" params="name parent child xyz">
+    <joint name="${name}" type="continuous">
+      <parent link="${parent}"/>
+      <child link="${child}"/>
+      <origin xyz="${xyz}" rpy="0 0 0"/>
+      <axis xyz="1 0 0"/>
+      <limit effort="30" velocity="4"/>
+      <dynamics damping="0.1" friction="0.1"/>\
+    </joint>
+  </xacro:macro>
+
+</robot>

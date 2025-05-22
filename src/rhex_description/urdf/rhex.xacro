@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro" name="hexapod">
+
+  <!-- Includes -->
+  <xacro:include filename="materials.xacro"/>
+  <xacro:include filename="macros.xacro"/>
+  <xacro:include filename="rhex.gazebo"/>
+  <xacro:include filename="rhex.trans"/>
+  <xacro:include filename="rhex.control.xacro"/>
+
+
+  <!-- Constants -->
+  <xacro:property name="scale" value="1 1 1"/>
+  <xacro:property name="imu_mass" value="0.01"/>
+
+
+  <!-- Base link -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <mesh filename="$(find rhex_description)/meshes/Chassis.stl" scale="${scale}"/>
+      </geometry>
+      <material name="ibm_blue"/>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="$(find rhex_description)/meshes/Chassis.stl" scale="${scale}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="3.703374358474152"/>
+      <origin xyz="0 0 0"/>
+      <inertia ixx="0.020087" ixy="-0.0" ixz="-0.0" iyy="0.090417" iyz="0.0" izz="0.108396"/>
+    </inertial>
+  </link>
+
+
+  <gazebo reference="base_link">
+    <self_collide>true</self_collide>
+  </gazebo>
+
+
+  <!-- Legs -->
+  <xacro:leg_link name="front_left_leg" mesh="left_leg.stl"/>
+  <xacro:leg_link name="centre_left_leg" mesh="left_leg.stl"/>
+  <xacro:leg_link name="back_left_leg" mesh="left_leg.stl"/>
+  <xacro:leg_link name="front_right_leg" mesh="right_leg.stl"/>
+  <xacro:leg_link name="centre_right_leg" mesh="right_leg.stl"/>
+  <xacro:leg_link name="back_right_leg" mesh="right_leg.stl"/>
+
+  <!-- Leg joints -->
+  <xacro:leg_joint name="front_left_leg_joint" parent="base_link" child="front_left_leg" xyz="0.11035 -0.135 0.04"/>
+  <xacro:leg_joint name="centre_left_leg_joint" parent="base_link" child="centre_left_leg" xyz="0.1495 0 0.04"/>
+  <xacro:leg_joint name="back_left_leg_joint" parent="base_link" child="back_left_leg" xyz="0.11035 0.135 0.04"/>
+  <xacro:leg_joint name="front_right_leg_joint" parent="base_link" child="front_right_leg" xyz="-0.11035 -0.135 0.04"/>
+  <xacro:leg_joint name="centre_right_leg_joint" parent="base_link" child="centre_right_leg" xyz="-0.1495 0 0.04"/>
+  <xacro:leg_joint name="back_right_leg_joint" parent="base_link" child="back_right_leg" xyz="-0.11035 0.135 0.04"/>
+
+
+  <xacro:rhex_control/>
+
+  <!-- Sensors (inline for now) -->
+  <!-- LIDAR, cameras, IMU go here (copied from your current file) -->
+
+</robot>
