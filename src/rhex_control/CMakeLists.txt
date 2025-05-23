@@ -9,6 +9,7 @@ find_package(rclpy REQUIRED)
 install(
   PROGRAMS
     scripts/rhex_gait.py
+    scripts/cmd_vel_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -4,51 +4,60 @@ from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
 import math
 
-class RHexEffortStepper(Node):
+# === PARAMETERS ===
+FREQUENCY = 100.0          # Hz
+GAIT_PERIOD = 2.0          # Full cycle (A + B phases)
+SWING_TIME = GAIT_PERIOD / 2
+ROTATION_DISTANCE = 2 * math.pi  # Full leg step rotation (adjust as needed)
+
+# Joint groups
+TRIPOD_A = ['front_left_leg_joint', 'centre_right_leg_joint', 'back_left_leg_joint']
+TRIPOD_B = ['front_right_leg_joint', 'centre_left_leg_joint', 'back_right_leg_joint']
+ALL_JOINTS = TRIPOD_A + TRIPOD_B
+
+class RHexSequentialTripodController(Node):
     def __init__(self):
-        super().__init__('rhex_effort_stepper')
+        super().__init__('rhex_sequential_tripod_controller')
 
-        self.publisher = self.create_publisher(Float64MultiArray, '/effort_controller/commands', 10)
+        self.publisher = self.create_publisher(Float64MultiArray, '/position_controller/commands', 10)
+        self.timer = self.create_timer(1.0 / FREQUENCY, self.update)
 
-        # Define tripod groups
-        self.tripod_A = [0, 2, 4]  # FL, BL, CR
-        self.tripod_B = [1, 3, 5]  # CL, FR, BR
+        self.start_time = self.get_clock().now()
+        self.joint_order = ALL_JOINTS
+        self.stance_angles = {joint: 0.0 for joint in ALL_JOINTS}  # hold angle for passive legs
 
-        self.phase = 0      # 0 = A active, 1 = B active
-        self.subphase = 0   # toggle every timer, switch phase every 2 toggles
+        self.get_logger().info("RHex sequential tripod gait started.")
 
-        self.step_duration = 0.6  # seconds
-        self.amplitude_linear = 2.0   # forward torque
-        self.frequency = 0.2          # gait frequency
+    def update(self):
+        now = self.get_clock().now()
+        t = (now - self.start_time).nanoseconds * 1e-9
+        phase_time = t % GAIT_PERIOD
 
-        self.start_time = self.get_clock().now().nanoseconds / 1e9
-        self.timer = self.create_timer(self.step_duration, self.timer_callback)
+        moving_tripod = TRIPOD_A if phase_time < SWING_TIME else TRIPOD_B
+        passive_tripod = TRIPOD_B if moving_tripod == TRIPOD_A else TRIPOD_A
 
-    def timer_callback(self):
-        # Time tracking for future gait improvements (not needed now)
-        # t = self.get_clock().now().nanoseconds / 1e9 - self.start_time
+        positions = []
 
-        # Straight walking: no turning
-        base_effort = self.amplitude_linear
-        efforts = [0.0] * 6
+        for joint in self.joint_order:
+            if joint in moving_tripod:
+                # Compute how far through swing we are (0 to 1)
+                local_time = phase_time % SWING_TIME
+                progress = local_time / SWING_TIME
+                angle = self.stance_angles[joint] + ROTATION_DISTANCE * progress
+                self.stance_angles[joint] = angle  # update to new contact angle
+            else:
+                # Hold position
+                angle = self.stance_angles[joint]
 
-        active_tripod = self.tripod_A if self.phase == 0 else self.tripod_B
-        for i in active_tripod:
-            efforts[i] = base_effort
+            positions.append(angle)
 
-        # Subphase logic: toggle tripod every 2 calls
-        self.subphase += 1
-        if self.subphase % 2 == 0:
-            self.phase = 1 - self.phase
-
-        # Publish
         msg = Float64MultiArray()
-        msg.data = efforts
+        msg.data = positions
         self.publisher.publish(msg)
 
 def main(args=None):
     rclpy.init(args=args)
-    node = RHexEffortStepper()
+    node = RHexSequentialTripodController()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
