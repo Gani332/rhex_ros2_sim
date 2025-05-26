@@ -32,10 +32,12 @@ class RHexCmdVelTripodController(Node):
         self.angular_z = 0.0
 
         self.joint_angles = {joint: 0.0 for joint in self.joint_order}
+        self.last_joint_angles = self.joint_angles.copy()
+        self.joint_velocities = {joint: 0.0 for joint in self.joint_order}
         self.tripod_start_angles = {joint: 0.0 for joint in self.current_tripod}
 
         self.last_debug_log = 0
-        self.get_logger().info("RHex cmd_vel tripod gait controller (clamped stepping) started.")
+        self.get_logger().info("RHex cmd_vel tripod gait controller (predictive stepping) started.")
 
     def cmd_vel_callback(self, msg: Twist):
         self.linear_x = msg.linear.x
@@ -51,7 +53,10 @@ class RHexCmdVelTripodController(Node):
 
         for name, position in zip(msg.name, msg.position):
             if name in self.joint_angles:
+                last_pos = self.joint_angles[name]
+                self.last_joint_angles[name] = last_pos
                 self.joint_angles[name] = position
+                self.joint_velocities[name] = (position - last_pos) * FREQUENCY
                 updated[name] = position
 
         if now - self.last_debug_log >= 1:
@@ -64,13 +69,17 @@ class RHexCmdVelTripodController(Node):
         if self.linear_x == 0.0 and self.angular_z == 0.0:
             velocities = [0.0 for _ in self.joint_order]
         else:
-            # Determine which tripod (if any) has reached the target
-            tripod_reached = all(
-                abs(self.joint_angles[joint] - self.tripod_start_angles[joint]) >= STEP_THRESHOLD
-                for joint in self.current_tripod
-            )
+            stepped = False
+            for joint in self.current_tripod:
+                current = self.joint_angles[joint]
+                velocity = self.joint_velocities[joint]
+                predicted = current + velocity / FREQUENCY
+                diff = abs(predicted - self.tripod_start_angles[joint])
+                if diff >= STEP_THRESHOLD:
+                    stepped = True
+                    break
 
-            if tripod_reached:
+            if stepped:
                 self.current_tripod, self.waiting_tripod = self.waiting_tripod, self.current_tripod
                 for j in self.current_tripod:
                     self.tripod_start_angles[j] = self.joint_angles[j]
@@ -82,22 +91,15 @@ class RHexCmdVelTripodController(Node):
             right_speed = max(min(right_speed, MAX_SPEED), -MAX_SPEED)
 
             for joint in self.joint_order:
-                target = self.tripod_start_angles.get(joint, 0.0) + STEP_THRESHOLD
-                current = self.joint_angles[joint]
-
                 if joint in self.current_tripod:
-                    if abs(current - target) >= STEP_THRESHOLD:
-                        velocity = 0.0
-                    elif 'left' in joint:
-                        velocity = left_speed
+                    if 'left' in joint:
+                        velocities.append(left_speed)
                     elif 'right' in joint:
-                        velocity = right_speed
+                        velocities.append(right_speed)
                     else:
-                        velocity = self.linear_x
+                        velocities.append(self.linear_x)
                 else:
-                    velocity = 0.0
-
-                velocities.append(velocity)
+                    velocities.append(0.0)
 
         msg = Float64MultiArray()
         msg.data = velocities
