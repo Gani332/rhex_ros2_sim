@@ -35,7 +35,7 @@ def generate_launch_description():
         Node(
             package="controller_manager",
             executable="spawner",
-            arguments=["position_controller"],
+            arguments=["velocity_controller"],
         ),
 
     ])

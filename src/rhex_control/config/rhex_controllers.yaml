@@ -5,10 +5,10 @@ controller_manager:
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
 
-    position_controller:
-      type: position_controllers/JointGroupPositionController
+    velocity_controller:
+      type: velocity_controllers/JointGroupVelocityController
 
-position_controller:
+velocity_controller:
   ros__parameters:
       joints:
         - front_left_leg_joint

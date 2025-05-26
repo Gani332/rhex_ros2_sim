@@ -1,12 +1,21 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
-from launch.substitutions import Command, PathJoinSubstitution, FindExecutable
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.substitutions import LaunchConfiguration, Command, PathJoinSubstitution, FindExecutable
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
+    # Declare use_sim argument (default true for gazebo)
+    use_sim_arg = DeclareLaunchArgument(
+        "use_sim",
+        default_value="true",
+        description="Use simulation or real hardware"
+    )
+
+    use_sim = LaunchConfiguration("use_sim")
+
     # Path to the robot's xacro file
     urdf_path = PathJoinSubstitution([
         FindPackageShare("rhex_description"),
@@ -14,13 +23,14 @@ def generate_launch_description():
         "rhex.xacro"
     ])
 
-    # Generate robot_description from xacro
+    # Generate robot_description from xacro with use_sim flag
     robot_description_content = Command([
         PathJoinSubstitution([FindExecutable(name="xacro")]),
         " ",
         urdf_path,
+        " use_sim:=", use_sim
     ])
-    robot_description = ParameterValue(robot_description_content, value_type=None)
+    robot_description = ParameterValue(robot_description_content, value_type=str)
 
     # Robot State Publisher
     robot_state_publisher_node = Node(
@@ -44,7 +54,7 @@ def generate_launch_description():
         ])
     )
 
-    # Spawn the robot entity in Gazebo
+    # Spawn robot in Gazebo
     spawn_entity = Node(
         package="gazebo_ros",
         executable="spawn_entity.py",
@@ -57,6 +67,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        use_sim_arg,
         gazebo,
         robot_state_publisher_node,
         spawn_entity,

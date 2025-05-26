@@ -1,6 +1,6 @@
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
 
-  <xacro:macro name="leg_link" params="name mesh">
+  <xacro:macro name="leg_link" params="name mesh xyz">
     <link name="${name}">
       <visual>
         <geometry>
@@ -14,9 +14,9 @@
         </geometry>
       </collision>
       <inertial>
-        <mass value="0.024174555469373752"/>
-        <origin xyz="0 0 0"/>
-        <inertia ixx="0.00011" ixy="0.0" ixz="0.0" iyy="0.00013" iyz="-0.0" izz="2.1e-05"/>
+        <mass value="0.064"/>
+        <origin xyz="${xyz}"/>
+        <inertia ixx="0.000143" ixy="-0.000000832" ixz="0.00000113" iyy="0.000114" iyz="0.0000159" izz="0.0000389"/>
       </inertial>
     </link>
 
@@ -36,5 +36,7 @@
       <dynamics damping="1.0" friction="1.0"/>\
     </joint>
   </xacro:macro>
+
+  
 
 </robot>

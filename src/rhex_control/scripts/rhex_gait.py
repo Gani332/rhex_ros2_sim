@@ -2,62 +2,81 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64MultiArray
-import math
+from geometry_msgs.msg import Twist
 
-# === PARAMETERS ===
-FREQUENCY = 100.0          # Hz
-GAIT_PERIOD = 2.0          # Full cycle (A + B phases)
-SWING_TIME = GAIT_PERIOD / 2
-ROTATION_DISTANCE = 2 * math.pi  # Full leg step rotation (adjust as needed)
+FREQUENCY = 100.0
+STEP_DURATION = 1.0  # seconds each tripod is active
+MAX_SPEED = 5.0      # max motor speed for mapping cmd_vel
+SCALE_LINEAR = 1.0   # scales how much linear.x affects leg speed
+SCALE_ANGULAR = 2.0  # scales how much angular.z affects left/right tripod balance
 
-# Joint groups
 TRIPOD_A = ['front_left_leg_joint', 'centre_right_leg_joint', 'back_left_leg_joint']
 TRIPOD_B = ['front_right_leg_joint', 'centre_left_leg_joint', 'back_right_leg_joint']
 ALL_JOINTS = TRIPOD_A + TRIPOD_B
 
-class RHexSequentialTripodController(Node):
+class RHexCmdVelTripodController(Node):
     def __init__(self):
-        super().__init__('rhex_sequential_tripod_controller')
+        super().__init__('rhex_cmdvel_tripod_controller')
 
-        self.publisher = self.create_publisher(Float64MultiArray, '/position_controller/commands', 10)
+        self.publisher = self.create_publisher(Float64MultiArray, '/velocity_controller/commands', 10)
+        self.cmd_vel_sub = self.create_subscription(Twist, '/cmd_vel', self.cmd_vel_callback, 10)
         self.timer = self.create_timer(1.0 / FREQUENCY, self.update)
 
-        self.start_time = self.get_clock().now()
         self.joint_order = ALL_JOINTS
-        self.stance_angles = {joint: 0.0 for joint in ALL_JOINTS}  # hold angle for passive legs
+        self.current_tripod = TRIPOD_A
+        self.waiting_tripod = TRIPOD_B
+        self.elapsed = 0.0
 
-        self.get_logger().info("RHex sequential tripod gait started.")
+        # Most recent velocity command
+        self.linear_x = 0.0
+        self.angular_z = 0.0
+
+        self.get_logger().info("RHex cmd_vel tripod gait controller started.")
+
+    def cmd_vel_callback(self, msg: Twist):
+        self.linear_x = msg.linear.x
+        self.angular_z = msg.angular.z
 
     def update(self):
-        now = self.get_clock().now()
-        t = (now - self.start_time).nanoseconds * 1e-9
-        phase_time = t % GAIT_PERIOD
+        velocities = []
 
-        moving_tripod = TRIPOD_A if phase_time < SWING_TIME else TRIPOD_B
-        passive_tripod = TRIPOD_B if moving_tripod == TRIPOD_A else TRIPOD_A
+        if self.linear_x == 0.0 and self.angular_z == 0.0:
+            # Stop all motors if no command
+            velocities = [0.0 for _ in self.joint_order]
+        else:
+            self.elapsed += 1.0 / FREQUENCY
+            if self.elapsed >= STEP_DURATION:
+                self.elapsed = 0.0
+                self.current_tripod, self.waiting_tripod = self.waiting_tripod, self.current_tripod
+                self.get_logger().info(f"Switched tripod: now moving {self.current_tripod}")
 
-        positions = []
+            # Map linear and angular velocity into motor speeds
+            left_speed = (self.linear_x - self.angular_z * SCALE_ANGULAR) * SCALE_LINEAR
+            right_speed = (self.linear_x + self.angular_z * SCALE_ANGULAR) * SCALE_LINEAR
 
-        for joint in self.joint_order:
-            if joint in moving_tripod:
-                # Compute how far through swing we are (0 to 1)
-                local_time = phase_time % SWING_TIME
-                progress = local_time / SWING_TIME
-                angle = self.stance_angles[joint] + ROTATION_DISTANCE * progress
-                self.stance_angles[joint] = angle  # update to new contact angle
-            else:
-                # Hold position
-                angle = self.stance_angles[joint]
+            # Clamp
+            left_speed = max(min(left_speed, MAX_SPEED), -MAX_SPEED)
+            right_speed = max(min(right_speed, MAX_SPEED), -MAX_SPEED)
 
-            positions.append(angle)
+            # Assign speeds to current tripod
+            for joint in self.joint_order:
+                if joint in self.current_tripod:
+                    if 'left' in joint:
+                        velocities.append(left_speed)
+                    elif 'right' in joint:
+                        velocities.append(right_speed)
+                    else:
+                        velocities.append(self.linear_x)
+                else:
+                    velocities.append(0.0)
 
         msg = Float64MultiArray()
-        msg.data = positions
+        msg.data = velocities
         self.publisher.publish(msg)
 
 def main(args=None):
     rclpy.init(args=args)
-    node = RHexSequentialTripodController()
+    node = RHexCmdVelTripodController()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
